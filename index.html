@@ -98,11 +98,12 @@ body {
 .sidebar {
     position: fixed;
     top: 0; left: 0; bottom: 0;
-    width: 270px;
+    width: 300px;
     background: var(--paper);
     border-right: 3px solid var(--ink);
     display: flex;
     flex-direction: column;
+    overflow-x: hidden;
     overflow-y: auto;
     flex-shrink: 0;
     z-index: 20;
@@ -283,7 +284,7 @@ body {
 
 /* ===== Main Content ===== */
 .main-content {
-    margin-left: 270px;
+    margin-left: 300px;
     height: 100vh;
     display: flex; flex-direction: column;
     overflow: hidden; background: transparent;
@@ -719,9 +720,30 @@ body {
 
 @media (max-width: 900px) {
     body { overflow-y: auto; }
-    .sidebar { position: static; width: 100%; max-height: 45vh; border-right: none; border-bottom: 3px solid var(--ink); }
+    .sidebar {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 3px solid var(--ink);
+        flex-direction: row;
+        flex-wrap: wrap;
+        overflow: visible;
+    }
+    .sidebar .brand { flex: 0 0 auto; padding: 8px 12px; }
+    .sidebar .brand-logo { height: 26px; }
+    .sidebar .search-box { flex: 1 1 200px; padding: 10px 12px; order: 3; }
+    .sidebar .location-section { display: none; } /* 手机上折叠地点管理，需要时点开 */
+    .sidebar .quick-filters { flex: 0 0 auto; padding: 6px 8px; flex-direction: row; gap: 6px; border-top: none; }
+    .sidebar .quick-filters .filter-btn { width: auto; padding: 6px 10px; font-size: 12px; }
+    .sidebar .sync-footer { flex: 0 0 auto; padding: 4px 8px; gap: 8px; flex-direction: row; align-items: center; border-top: none; }
+    .sidebar .sync-footer .sync-btn { width: auto; padding: 6px 12px; font-size: 12px; }
+    .sidebar .sync-status, .sidebar .app-version { display: none; }
     .main-content { margin-left: 0; height: auto; }
     .items-grid, .stats-container { grid-template-columns: 1fr; }
+    .topbar { padding: 10px 14px; min-height: 56px; }
+    .topbar .header-stats { flex-wrap: wrap; gap: 6px; }
+    .stat-pill { font-size: 12px; padding: 4px 10px; }
 }
 
 /* ===== Inline SVG icons (replace Font Awesome, offline-safe) ===== */
@@ -1116,7 +1138,7 @@ body {
 const DB_KEY = 'home_inventory_db';
 
 // 应用版本号（用于判断浏览器是否加载到最新代码）
-const APP_VERSION = '2026.08.01.25';
+const APP_VERSION = '2026.08.01.26';
 
 let db = {
     locations: [],
