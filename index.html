@@ -1138,7 +1138,7 @@ body {
 const DB_KEY = 'home_inventory_db';
 
 // 应用版本号（用于判断浏览器是否加载到最新代码）
-const APP_VERSION = '2026.08.01.26';
+const APP_VERSION = '2026.08.01.27';
 
 let db = {
     locations: [],
@@ -3092,43 +3092,38 @@ async function pullFromRemote() {
         }
     }
 
-    // 回退：直连 Supabase REST + no-store + header cache-buster + 重试
+    // 回退：直连 Supabase，用 RPC POST 请求拉取（POST 不被任何 HTTP 缓存机制缓存）
     const baseUrl = syncConfig.url.replace(/\/$/, '');
-    const cb = () => Date.now() + '_' + Math.random().toString(36).slice(2, 10);
     const headers = {
         'apikey': syncConfig.anonKey,
         'Authorization': 'Bearer ' + syncConfig.anonKey,
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'X-Request-Id': 'cb_' + cb(),
-        'X-Cache-Buster': cb()
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store'
     };
 
-    // 查总数
-    try {
-        const cr = await fetch(baseUrl + '/rest/v1/goods_records?select=count', { method: 'GET', headers, cache: 'no-store' });
-        if (cr.ok) {
-            const cj = await cr.json();
-            if (Array.isArray(cj) && cj[0]) total = parseInt(cj[0].count, 10);
-        }
-    } catch (e) { total = null; }
-
     let lastLen = -1;
-    for (let attempt = 1; attempt <= 5; attempt++) {
-        headers['X-Request-Id'] = 'cb_' + cb();
-        headers['X-Cache-Buster'] = cb();
-        const r = await fetch(baseUrl + '/rest/v1/goods_records?select=*&order=updated_at.asc', { method: 'GET', headers, cache: 'no-store' });
-        if (!r.ok) { logSync('直连拉取失败：HTTP ' + r.status); if (attempt < 5) await new Promise(rr => setTimeout(rr, 1500)); continue; }
-        data = await r.json();
-        if (attempt > 1) {
-            if (total !== null && data.length >= total) break;
-            if (total === null && data.length === lastLen) break;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        // POST 到 RPC 函数 get_all_records，绕开 GET 缓存
+        const r = await fetch(baseUrl + '/rest/v1/rpc/get_all_records', {
+            method: 'POST',
+            headers,
+            body: '{}',
+            cache: 'no-store'
+        });
+        if (!r.ok) {
+            logSync('直连拉取失败：HTTP ' + r.status);
+            if (attempt < 3) await new Promise(rr => setTimeout(rr, 1500));
+            continue;
         }
+        const result = await r.json();
+        data = Array.isArray(result) ? result : [];
+        total = data.length; // RPC 返回全部记录，total = data.length
+
+        if (attempt > 1 && data.length === lastLen) break;
         lastLen = data.length;
-        if (attempt < 5) {
-            logSync('拉取到 ' + data.length + ' 条' + (total !== null ? '（云端共 ' + total + ' 条）' : '') + '，1.5秒后确认(' + attempt + '/5)');
-            await new Promise(r => setTimeout(r, 1500));
+        if (attempt < 3) {
+            logSync('拉取到 ' + data.length + ' 条，确认(' + attempt + '/3)');
+            await new Promise(r => setTimeout(r, 1000));
         }
     }
 
