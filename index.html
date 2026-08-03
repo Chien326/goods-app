@@ -912,9 +912,14 @@ body {
         <div class="tab-panel active" id="tab-items">
             <div class="panel-toolbar">
                 <h2 id="currentLocationTitle"><i class="fas fa-box-open"></i> 全部物品</h2>
-                <button class="btn-primary" id="addItemBtn">
-                    <i class="fas fa-plus"></i> 添加物品
-                </button>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn-secondary" id="exportExcelBtn" title="导出为 Excel/CSV 文件">
+                        <i class="fas fa-file-arrow-down"></i> 导出
+                    </button>
+                    <button class="btn-primary" id="addItemBtn">
+                        <i class="fas fa-plus"></i> 添加物品
+                    </button>
+                </div>
             </div>
             <div class="items-grid" id="itemsGrid">
                 <!-- Items populated by JS -->
@@ -1138,7 +1143,7 @@ body {
 const DB_KEY = 'home_inventory_db';
 
 // 应用版本号（用于判断浏览器是否加载到最新代码）
-const APP_VERSION = '2026.08.01.27';
+const APP_VERSION = '2026.08.03.28';
 
 let db = {
     locations: [],
@@ -2647,6 +2652,9 @@ function bindEvents() {
         openItemModal(null);
     });
 
+    // Export to Excel/CSV
+    document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
+
     // Save location
     document.getElementById('saveLocationBtn').addEventListener('click', saveLocation);
 
@@ -3238,6 +3246,60 @@ async function manualSync() {
 // 清空本机所有数据：物品、地点、出入库记录全部删除，重新初始化为种子数据。
 // 用途：当两端数据已经严重分裂、无法靠普通 sync 修复时，在「数据不完整」的一端
 // 执行「清空本地」+「立即同步」，另一端执行「强制重新同步」，即可让两端彻底对齐。
+// 导出为 CSV（UTF-8 BOM，Excel 直接打开中文不乱码）
+function exportToExcel() {
+    const activeItems = db.items.filter(i => !i.deleted);
+    if (activeItems.length === 0) {
+        toast('没有物品可导出', 'warning');
+        return;
+    }
+
+    // CSV 表头
+    const headers = ['物品名称', '数量', '单位', '分类', '所在位置', '最低库存预警', '备注', '更新时间'];
+    const rows = [headers];
+
+    // 数据行
+    for (const item of activeItems) {
+        const locPath = item.locationId ? getLocationPathString(item.locationId) : '';
+        const updated = item.updatedAt ? new Date(item.updatedAt).toLocaleString('zh-CN') : '';
+        rows.push([
+            item.name || '',
+            item.quantity || 0,
+            item.unit || '',
+            item.category || '',
+            locPath,
+            item.minStock > 0 ? item.minStock : '',
+            item.note || '',
+            updated
+        ]);
+    }
+
+    // 转 CSV 字符串（逗号分隔，双引号转义）
+    const csv = rows.map(row =>
+        row.map(cell => {
+            const s = String(cell);
+            // 含逗号、引号、换行的字段用双引号包裹
+            if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+                return '"' + s.replace(/"/g, '""') + '"';
+            }
+            return s;
+        }).join(',')
+    ).join('\n');
+
+    // UTF-8 BOM（让 Excel 正确识别中文编码）
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const now = new Date();
+    const ts = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+    link.href = url;
+    link.download = 'GOODS-物品清单-' + ts + '.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+    toast('已导出 ' + activeItems.length + ' 个物品', 'success');
+}
+
 async function resetLocalData() {
     const confirmed = await confirmDialog(
         '确认清空本机所有数据？',
